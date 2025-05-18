@@ -9,7 +9,7 @@
 <body style="margin: 0; overflow: hidden;">
   <a-scene embedded arjs="trackingMethod: best; sourceType: webcam;">
     <!-- Marcador Hiro predefinido -->
-    <a-marker preset="hiro">
+    <a-marker type="pattern" url="corazon.patt">
       <!-- Entidad que carga el modelo .gltf -->
         <a-entity
             gltf-model="url(scene.gltf)"
