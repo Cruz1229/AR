@@ -2,65 +2,75 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>AR con WebXR Hit Test</title>
-  <!-- A-Frame 1.7+ para soporte WebXR -->
-  <script src="https://aframe.io/releases/1.7.0/aframe.min.js"></script>
-  <!-- Componente ar-hit-test de A-Frame -->
-  <script src="https://unpkg.com/aframe-ar-hit-test-component@4.0.1/dist/aframe-ar-hit-test-component.min.js"></script>
+  <title>AR sin Marcador</title>
+  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+  <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
+  
+  <script>
+    AFRAME.registerComponent('tap-to-place', {
+      init: function() {
+        const scene = this.el.sceneEl;
+        const model = document.getElementById('modelo3d');
+        let isPlaced = false;
+        
+        // Mostrar el modelo inmediatamente, pero invisible
+        model.setAttribute('visible', 'false');
+        
+        // Función para colocar el modelo donde el usuario toca
+        function placeModel(event) {
+          // Solo permite mover si no está fijado
+          if (!isPlaced) {
+            // Obtener posición donde se tocó
+            const touchPosition = event.detail.intersection.point;
+            model.setAttribute('position', touchPosition);
+            model.setAttribute('visible', 'true');
+            
+            // Preguntar al usuario si quiere fijar el modelo
+            if (confirm('¿Deseas fijar el modelo en esta ubicación?')) {
+              isPlaced = true;
+              // Opcional: Mostrar algún feedback visual de que está fijo
+              console.log('Modelo fijado en posición');
+            }
+          }
+        }
+        
+        // Escuchar eventos de clic/tap en la escena
+        scene.addEventListener('click', function(e) {
+          placeModel(e);
+        });
+      }
+    });
+  </script>
 </head>
 <body style="margin: 0; overflow: hidden;">
   <a-scene
     embedded
+    arjs="trackingMethod: best; sourceType: webcam; debugUIEnabled: false;"
+    renderer="logarithmicDepthBuffer: true;"
     vr-mode-ui="enabled: false"
-    webxr="optionalFeatures: hit-test"
-    ar-hit-test="target: #model; reticle: #reticle"
-  >
-    <!-- Retículo que muestra dónde hay superficie -->
-    <a-entity
-      id="reticle"
-      geometry="primitive: ring; radiusInner: 0.05; radiusOuter: 0.06"
+    tap-to-place>
+    
+    <!-- Superficie donde se detectará el piso -->
+    <a-plane
+      id="suelo"
       rotation="-90 0 0"
-      visible="false">
-    </a-entity>
-
-    <!-- Modelo 3D oculto hasta colocación -->
+      width="100"
+      height="100"
+      color="rgba(0,0,0,0)"
+      material="opacity: 0.0"
+      class="collidable"></a-plane>
+    
+    <!-- Modelo 3D que aparecerá automáticamente -->
     <a-entity
-      id="model"
+      id="modelo3d"
       gltf-model="url(scene.gltf)"
       scale="0.5 0.5 0.5"
-      visible="false">
-    </a-entity>
-
-    <!-- Cámara AR -->
-    <a-entity camera look-controls></a-entity>
+      rotation="-90 0 0"
+      position="0 0 -1"
+      visible="true"></a-entity>
+    
+    <!-- Cámara para AR -->
+    <a-entity camera look-controls wasd-controls></a-entity>
   </a-scene>
-
-  <script>
-    const sceneEl = document.querySelector('a-scene');
-
-    sceneEl.addEventListener('enter-vr', () => {
-      // Solo interesa cuando realmente entramos en modo AR
-      if (!sceneEl.is('ar-mode')) return;
-
-      // Cuando el hit-test haya detectado una superficie
-      sceneEl.addEventListener('ar-hit-test-achieved', () => {
-        const reticle = document.querySelector('#reticle');
-        reticle.setAttribute('visible', 'true');
-        console.log('Superficie detectada: toca la pantalla para colocar el modelo.');
-      }, { once: true });
-
-      // Al tocar la pantalla, colocamos y anclamos el modelo
-      sceneEl.addEventListener('ar-hit-test-select', (event) => {
-        const model = document.querySelector('#model');
-        // Posiciona el modelo en la pose devuelta por hit-test
-        const pose = event.detail.position;
-        const rotation = event.detail.rotation;
-        model.setAttribute('position', pose);
-        model.setAttribute('rotation', rotation);
-        model.setAttribute('visible', 'true');
-        console.log('Modelo colocado y anclado en el mundo real.');
-      }, { once: true });
-    });
-  </script>
 </body>
 </html>
