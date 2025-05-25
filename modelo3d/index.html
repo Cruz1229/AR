@@ -2,10 +2,47 @@
 <html lang="es">
 <head>
   <meta charset="utf-8">
-  <title>AR.js con Three.js</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AR.js con Three.js - Modelo 3D Personalizado</title>
   <style>
-    body { margin: 0; overflow: hidden; }
-    canvas { position: absolute; top: 0; left: 0; }
+    body { 
+      margin: 0; 
+      overflow: hidden; 
+      font-family: Arial, sans-serif;
+    }
+    
+    #arjs-video {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    
+    #loading {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(0, 0, 0, 0.8);
+      color: white;
+      padding: 20px;
+      border-radius: 10px;
+      z-index: 1000;
+    }
+    
+    #info {
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      background: rgba(0, 0, 0, 0.7);
+      color: white;
+      padding: 10px;
+      border-radius: 5px;
+      font-size: 14px;
+      z-index: 100;
+    }
   </style>
 
   <!-- Three.js -->
@@ -16,42 +53,69 @@
   <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js/three.js/build/ar-threex.js"></script>
 </head>
 <body>
+  <div id="loading">Cargando modelo 3D...</div>
+  <div id="info">Apunta la cámara al marcador Hiro</div>
+
   <script>
     let scene, camera, renderer;
     let arToolkitSource, arToolkitContext;
     let markerRoot;
+    let model;
+    let clock = new THREE.Clock();
+    let mixer;
 
     init();
     animate();
 
     function init() {
+      // Crear escena
       scene = new THREE.Scene();
 
+      // Crear cámara
       camera = new THREE.Camera();
       scene.add(camera);
 
-      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      // Crear renderer
+      renderer = new THREE.WebGLRenderer({ 
+        antialias: true, 
+        alpha: true,
+        logarithmicDepthBuffer: true
+      });
       renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(window.devicePixelRatio);
       renderer.setClearColor(0x000000, 0);
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
       document.body.appendChild(renderer.domElement);
 
-      // AR Toolkit Source (webcam)
+      // Configurar AR Toolkit Source (webcam)
       arToolkitSource = new THREEx.ArToolkitSource({
         sourceType: 'webcam',
+        sourceWidth: 1280,
+        sourceHeight: 960,
+        displayWidth: 1280,
+        displayHeight: 960,
       });
 
       arToolkitSource.init(() => {
         onResize();
+        setTimeout(() => {
+          onResize();
+        }, 2000);
       });
 
+      // Evento de redimensionamiento
       window.addEventListener('resize', () => {
         onResize();
       });
 
-      // AR Toolkit Context
+      // Configurar AR Toolkit Context
       arToolkitContext = new THREEx.ArToolkitContext({
         cameraParametersUrl: 'https://cdn.jsdelivr.net/gh/AR-js-org/AR.js/three.js/data/camera_para.dat',
         detectionMode: 'mono',
+        maxDetectionRate: 30,
+        canvasWidth: 1280,
+        canvasHeight: 960,
       });
 
       arToolkitContext.init(() => {
@@ -62,27 +126,100 @@
       markerRoot = new THREE.Group();
       scene.add(markerRoot);
 
+      // Configurar controles del marcador
       let markerControls = new THREEx.ArMarkerControls(arToolkitContext, markerRoot, {
         type: 'pattern',
         patternUrl: 'https://cdn.jsdelivr.net/gh/AR-js-org/AR.js/three.js/data/patt.hiro',
+        changeMatrixMode: 'cameraTransformMatrix'
       });
 
-      // Luz básica
-      let light = new THREE.AmbientLight(0xffffff, 1);
-      scene.add(light);
+      // Agregar luces
+      setupLights();
 
-      // Cargar modelo glTF
+      // Cargar el modelo GLTF
+      loadModel();
+    }
+
+    function setupLights() {
+      // Luz ambiental
+      const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+      scene.add(ambientLight);
+
+      // Luz direccional principal
+      const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+      directionalLight.position.set(5, 10, 5);
+      directionalLight.castShadow = true;
+      directionalLight.shadow.mapSize.width = 2048;
+      directionalLight.shadow.mapSize.height = 2048;
+      markerRoot.add(directionalLight);
+
+      // Luz puntual para resaltar el modelo
+      const pointLight = new THREE.PointLight(0xffffff, 0.5);
+      pointLight.position.set(0, 2, 0);
+      markerRoot.add(pointLight);
+
+      // Luz hemisférica para iluminación suave
+      const hemisphereLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.4);
+      scene.add(hemisphereLight);
+    }
+
+    function loadModel() {
       const loader = new THREE.GLTFLoader();
+      
+      // IMPORTANTE: Asegúrate de que la ruta 'scene.gltf' sea correcta
+      // Si el archivo está en una carpeta diferente, ajusta la ruta
       loader.load(
-        scene.gltf,
+        'scene.gltf', // Ruta al archivo GLTF
         function (gltf) {
-          let model = gltf.scene;
-          model.scale.set(0.01, 0.01, 0.01);
+          model = gltf.scene;
+          
+          // Ajustar escala según el tamaño del modelo
+          // Puedes modificar estos valores según necesites
+          model.scale.set(0.5, 0.5, 0.5);
+          
+          // Centrar el modelo
+          const box = new THREE.Box3().setFromObject(model);
+          const center = box.getCenter(new THREE.Vector3());
+          model.position.sub(center);
+          
+          // Ajustar posición vertical si es necesario
+          model.position.y = 0;
+          
+          // Habilitar sombras
+          model.traverse((child) => {
+            if (child.isMesh) {
+              child.castShadow = true;
+              child.receiveShadow = true;
+            }
+          });
+          
+          // Agregar el modelo al marcador
           markerRoot.add(model);
+          
+          // Si el modelo tiene animaciones
+          if (gltf.animations && gltf.animations.length > 0) {
+            mixer = new THREE.AnimationMixer(model);
+            gltf.animations.forEach((clip) => {
+              mixer.clipAction(clip).play();
+            });
+          }
+          
+          // Ocultar mensaje de carga
+          document.getElementById('loading').style.display = 'none';
+          
+          console.log('Modelo cargado exitosamente');
         },
-        undefined,
+        // Progreso de carga
+        function (xhr) {
+          const percentComplete = (xhr.loaded / xhr.total) * 100;
+          document.getElementById('loading').innerHTML = 
+            `Cargando modelo 3D... ${Math.round(percentComplete)}%`;
+        },
+        // Error
         function (error) {
           console.error('Error al cargar el modelo GLTF:', error);
+          document.getElementById('loading').innerHTML = 
+            'Error al cargar el modelo. Verifica la consola.';
         }
       );
     }
@@ -98,10 +235,23 @@
     function animate() {
       requestAnimationFrame(animate);
 
+      // Actualizar AR
       if (arToolkitSource && arToolkitSource.ready) {
         arToolkitContext.update(arToolkitSource.domElement);
       }
 
+      // Actualizar animaciones si existen
+      if (mixer) {
+        const delta = clock.getDelta();
+        mixer.update(delta);
+      }
+
+      // Rotar el modelo (opcional)
+      if (model && markerRoot.visible) {
+        model.rotation.y += 0.01;
+      }
+
+      // Renderizar
       renderer.render(scene, camera);
     }
   </script>
