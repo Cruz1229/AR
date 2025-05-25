@@ -1,338 +1,304 @@
-<!DOCTYPE html>
-<html lang="es">
+<!doctype html>
+<html lang="en">
 <head>
-    <meta charset="utf-8">
-    <title>AR.js con Three.js - Ejemplo Básico</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <style>
-        body { 
-            margin: 0; 
-            overflow: hidden; 
-            font-family: Arial, sans-serif;
-        }
-        canvas { 
-            position: absolute; 
-            top: 0; 
-            left: 0; 
-        }
-        #info {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            background: rgba(0,0,0,0.8);
-            color: white;
-            padding: 15px;
-            border-radius: 8px;
-            font-size: 14px;
-            z-index: 100;
-            max-width: 300px;
-        }
-        #error {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: rgba(255,0,0,0.9);
-            color: white;
-            padding: 20px;
-            border-radius: 8px;
-            text-align: center;
-            display: none;
-            z-index: 200;
-        }
-    </style>
+	<title>Marching Cubes (Three.js)</title>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+	<link rel=stylesheet href="assets/css/base.css"/>
 </head>
 <body>
-    <div id="info">
-        <strong>Instrucciones:</strong><br>
-        1. Permite el acceso a la cámara<br>
-        2. Descarga e imprime el marcador Hiro<br>
-        3. Apunta la cámara hacia el marcador
-    </div>
-    
-    <div id="error">
-        <h3>Error de conexión</h3>
-        <p>No se pudieron cargar los recursos de AR.js.</p>
-        <p>Verifica tu conexión a internet.</p>
-    </div>
 
-    <!-- Three.js -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <!-- AR.js para Three.js - versión más estable -->
-    <script src="https://raw.githack.com/AR-js-org/AR.js/master/three.js/build/ar-threex.js"></script>
+<script src="assets/js/Three.js"></script>
+<script src="assets/js/Detector.js"></script>
+<script src="assets/js/Stats.js"></script>
+<script src="assets/js/OrbitControls.js"></script>
+<script src="assets/js/THREEx.KeyboardState.js"></script>
+<script src="assets/js/THREEx.FullScreen.js"></script>
+<script src="assets/js/THREEx.WindowResize.js"></script>
 
-    <script>
-        let scene, camera, renderer;
-        let arToolkitSource, arToolkitContext;
-        let markerRoot;
-        let cube, sphere;
-        let isMarkerVisible = false;
-        let animationId;
+<!-- Contains Lookup Tables for the Marching Cubes Algorithm -->
+<script src="assets/js/MarchingCubesData.js"></script>
 
-        // Configuración de URLs alternativas
-        const AR_CONFIG = {
-            cameraParams: 'https://raw.githack.com/AR-js-org/AR.js/master/three.js/data/camera_para.dat',
-            hiroPattern: 'https://raw.githack.com/AR-js-org/AR.js/master/three.js/data/patt.hiro'
-        };
+<!-- jQuery code to display an information button and box when clicked. -->
+<script src="assets/js/jquery-1.9.1.js"></script>
+<script src="assets/js/jquery-ui.js"></script>
+<link rel=stylesheet href="assets/css/jquery-ui.css" />
+<link rel=stylesheet href="assets/css/info.css"/>
+<script src="assets/js/info.js"></script>
+<div id="infoButton"></div>
+<div id="infoBox" title="Demo Information">
+This three.js demo is part of a collection at
+<a href="http://stemkoski.github.io/Three.assets/js/">http://stemkoski.github.io/Three.assets/js/</a>
+</div>
+<!-- ------------------------------------------------------------ -->
 
-        init();
+<div id="ThreeJS" style="position: absolute; left:0px; top:0px"></div>
+<script>
+/*
+	Three.js "tutorials by example"
+	Author: Lee Stemkoski
+	Date: July 2013 (three.js v59dev)
+*/
 
-        function init() {
-            try {
-                setupScene();
-                setupRenderer();
-                setupLighting();
-                setupAR(); // Esto ahora manejará la creación del contenido AR de forma asíncrona
-                animate();
-            } catch (error) {
-                console.error('Error durante la inicialización:', error);
-                showError('Error de inicialización: ' + error.message);
-            }
-        }
+// MAIN
 
-        function setupScene() {
-            scene = new THREE.Scene();
-            camera = new THREE.Camera();
-            scene.add(camera);
-        }
+// standard global variables
+var container, scene, camera, renderer, controls, stats;
+var keyboard = new THREEx.KeyboardState();
+var clock = new THREE.Clock();
 
-        function setupRenderer() {
-            renderer = new THREE.WebGLRenderer({ 
-                antialias: true, 
-                alpha: true 
-            });
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.setClearColor(0x000000, 0);
-            renderer.shadowMap.enabled = true;
-            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-            document.body.appendChild(renderer.domElement);
-        }
+// custom global variables
+var points = [];
+var values = [];
+var size;
 
-        function setupAR() {
-            updateInfo('Iniciando cámara...');
+init();
+animate();
 
-            // Configurar AR Toolkit Source
-            arToolkitSource = new THREEx.ArToolkitSource({
-                sourceType: 'webcam',
-            });
+// FUNCTIONS 		
+function init() 
+{
+	// SCENE
+	scene = new THREE.Scene();
+	// CAMERA
+	var SCREEN_WIDTH = window.innerWidth, SCREEN_HEIGHT = window.innerHeight;
+	var VIEW_ANGLE = 45, ASPECT = SCREEN_WIDTH / SCREEN_HEIGHT, NEAR = 0.1, FAR = 20000;
+	camera = new THREE.PerspectiveCamera( VIEW_ANGLE, ASPECT, NEAR, FAR);
+	scene.add(camera);
+	camera.position.set(20,20,60);
+	camera.lookAt(scene.position);	
+	// RENDERER
+	if ( Detector.webgl )
+		renderer = new THREE.WebGLRenderer( {antialias:true} );
+	else
+		renderer = new THREE.CanvasRenderer(); 
+	renderer.setSize(SCREEN_WIDTH, SCREEN_HEIGHT);
+	container = document.getElementById( 'ThreeJS' );
+	container.appendChild( renderer.domElement );
+	// EVENTS
+	THREEx.WindowResize(renderer, camera);
+	THREEx.FullScreen.bindKey({ charCode : 'm'.charCodeAt(0) });
+	// CONTROLS
+	controls = new THREE.OrbitControls( camera, renderer.domElement );
+	// STATS
+	stats = new Stats();
+	stats.domElement.style.position = 'absolute';
+	stats.domElement.style.bottom = '0px';
+	stats.domElement.style.zIndex = 100;
+	container.appendChild( stats.domElement );
+	// LIGHT
+	var light = new THREE.PointLight(0xffffff);
+	light.position.set(0,10,0);
+	scene.add(light);
+	 
+	////////////
+	// CUSTOM //
+	////////////
+	
+	scene.add( new THREE.AxisHelper(100) );
 
-            arToolkitSource.init(() => {
-                console.log('AR Source inicializado');
-                onResize();
-                updateInfo('Cámara iniciada. Cargando parámetros AR...');
-                
-                // Configurar AR Toolkit Context después de que la cámara esté lista
-                arToolkitContext = new THREEx.ArToolkitContext({
-                    cameraParametersUrl: AR_CONFIG.cameraParams,
-                    detectionMode: 'mono',
-                });
+	// number of cubes along a side
+	size = 20;
 
-                arToolkitContext.init(() => {
-                    console.log('AR Context inicializado');
-                    camera.projectionMatrix.copy(arToolkitContext.getProjectionMatrix());
-                    updateInfo('AR inicializado. Configurando marcador...');
-                    setupMarker();
-                }, (error) => {
-                    console.error('Error al inicializar AR Context:', error);
-                    showError('Error al cargar parámetros de AR. Verifica la conexión.');
-                });
+	var axisMin = -10;
+	var axisMax =  10;
+	var axisRange = axisMax - axisMin;
+	
+	// Generate a list of 3D points and values at those points
+	for (var k = 0; k < size; k++)
+	for (var j = 0; j < size; j++)
+	for (var i = 0; i < size; i++)
+	{
+		// actual values
+		var x = axisMin + axisRange * i / (size - 1);
+		var y = axisMin + axisRange * j / (size - 1);
+		var z = axisMin + axisRange * k / (size - 1);
+		points.push( new THREE.Vector3(x,y,z) );
+		var value = x*x + y*y - z*z - 25;
+	    values.push( value );
+	}
+	 
+	// Marching Cubes Algorithm
+	
+	var size2 = size * size;
 
-            }, (error) => {
-                console.error('Error al inicializar AR Source:', error);
-                showError('Error al acceder a la cámara. Verifica los permisos.');
-            });
+	// Vertices may occur along edges of cube, when the values at the edge's endpoints
+	//   straddle the isolevel value.
+	// Actual position along edge weighted according to function values.
+	var vlist = new Array(12);
+	
+	var geometry = new THREE.Geometry();
+	var vertexIndex = 0;
+	
+	for (var z = 0; z < size - 1; z++)
+	for (var y = 0; y < size - 1; y++)
+	for (var x = 0; x < size - 1; x++)
+	{
+		// index of base point, and also adjacent points on cube
+		var p    = x + size * y + size2 * z,
+			px   = p   + 1,
+			py   = p   + size,
+			pxy  = py  + 1,
+			pz   = p   + size2,
+			pxz  = px  + size2,
+			pyz  = py  + size2,
+			pxyz = pxy + size2;
+		
+		// store scalar values corresponding to vertices
+		var value0 = values[ p    ],
+			value1 = values[ px   ],
+			value2 = values[ py   ],
+			value3 = values[ pxy  ],
+			value4 = values[ pz   ],
+			value5 = values[ pxz  ],
+			value6 = values[ pyz  ],
+			value7 = values[ pxyz ];
+		
+		// place a "1" in bit positions corresponding to vertices whose
+		//   isovalue is less than given constant.
+		
+		var isolevel = 0;
+		
+		var cubeindex = 0;
+		if ( value0 < isolevel ) cubeindex |= 1;
+		if ( value1 < isolevel ) cubeindex |= 2;
+		if ( value2 < isolevel ) cubeindex |= 8;
+		if ( value3 < isolevel ) cubeindex |= 4;
+		if ( value4 < isolevel ) cubeindex |= 16;
+		if ( value5 < isolevel ) cubeindex |= 32;
+		if ( value6 < isolevel ) cubeindex |= 128;
+		if ( value7 < isolevel ) cubeindex |= 64;
+		
+		// bits = 12 bit number, indicates which edges are crossed by the isosurface
+		var bits = THREE.edgeTable[ cubeindex ];
+		
+		// if none are crossed, proceed to next iteration
+		if ( bits === 0 ) continue;
+		
+		// check which edges are crossed, and estimate the point location
+		//    using a weighted average of scalar values at edge endpoints.
+		// store the vertex in an array for use later.
+		var mu = 0.5; 
+		
+		// bottom of the cube
+		if ( bits & 1 )
+		{		
+			mu = ( isolevel - value0 ) / ( value1 - value0 );
+			vlist[0] = points[p].clone().lerp( points[px], mu );
+		}
+		if ( bits & 2 )
+		{
+			mu = ( isolevel - value1 ) / ( value3 - value1 );
+			vlist[1] = points[px].clone().lerp( points[pxy], mu );
+		}
+		if ( bits & 4 )
+		{
+			mu = ( isolevel - value2 ) / ( value3 - value2 );
+			vlist[2] = points[py].clone().lerp( points[pxy], mu );
+		}
+		if ( bits & 8 )
+		{
+			mu = ( isolevel - value0 ) / ( value2 - value0 );
+			vlist[3] = points[p].clone().lerp( points[py], mu );
+		}
+		// top of the cube
+		if ( bits & 16 )
+		{
+			mu = ( isolevel - value4 ) / ( value5 - value4 );
+			vlist[4] = points[pz].clone().lerp( points[pxz], mu );
+		}
+		if ( bits & 32 )
+		{
+			mu = ( isolevel - value5 ) / ( value7 - value5 );
+			vlist[5] = points[pxz].clone().lerp( points[pxyz], mu );
+		}
+		if ( bits & 64 )
+		{
+			mu = ( isolevel - value6 ) / ( value7 - value6 );
+			vlist[6] = points[pyz].clone().lerp( points[pxyz], mu );
+		}
+		if ( bits & 128 )
+		{
+			mu = ( isolevel - value4 ) / ( value6 - value4 );
+			vlist[7] = points[pz].clone().lerp( points[pyz], mu );
+		}
+		// vertical lines of the cube
+		if ( bits & 256 )
+		{
+			mu = ( isolevel - value0 ) / ( value4 - value0 );
+			vlist[8] = points[p].clone().lerp( points[pz], mu );
+		}
+		if ( bits & 512 )
+		{
+			mu = ( isolevel - value1 ) / ( value5 - value1 );
+			vlist[9] = points[px].clone().lerp( points[pxz], mu );
+		}
+		if ( bits & 1024 )
+		{
+			mu = ( isolevel - value3 ) / ( value7 - value3 );
+			vlist[10] = points[pxy].clone().lerp( points[pxyz], mu );
+		}
+		if ( bits & 2048 )
+		{
+			mu = ( isolevel - value2 ) / ( value6 - value2 );
+			vlist[11] = points[py].clone().lerp( points[pyz], mu );
+		}
+		
+		// construct triangles -- get correct vertices from triTable.
+		var i = 0;
+		cubeindex <<= 4;  // multiply by 16... 
+		// "Re-purpose cubeindex into an offset into triTable." 
+		//  since each row really isn't a row.
+		 
+		// the while loop should run at most 5 times,
+		//   since the 16th entry in each row is a -1.
+		while ( THREE.triTable[ cubeindex + i ] != -1 ) 
+		{
+			var index1 = THREE.triTable[cubeindex + i];
+			var index2 = THREE.triTable[cubeindex + i + 1];
+			var index3 = THREE.triTable[cubeindex + i + 2];
+			
+			geometry.vertices.push( vlist[index1].clone() );
+			geometry.vertices.push( vlist[index2].clone() );
+			geometry.vertices.push( vlist[index3].clone() );
+			var face = new THREE.Face3(vertexIndex, vertexIndex+1, vertexIndex+2);
+			geometry.faces.push( face );
 
-            // Manejar redimensionamiento
-            window.addEventListener('resize', onResize);
-        }
+			geometry.faceVertexUvs[ 0 ].push( [ new THREE.Vector2(0,0), new THREE.Vector2(0,1), new THREE.Vector2(1,1) ] );
 
-        function setupMarker() {
-            try {
-                // Crear el grupo para el marcador
-                markerRoot = new THREE.Group();
-                scene.add(markerRoot);
-                console.log('markerRoot creado exitosamente');
+			vertexIndex += 3;
+			i += 3;
+		}
+	}
+	
+	geometry.computeCentroids();
+	geometry.computeFaceNormals();
+	geometry.computeVertexNormals();
+	
+	var colorMaterial =  new THREE.MeshLambertMaterial( {color: 0x0000ff, side: THREE.DoubleSide} );
+	var mesh = new THREE.Mesh( geometry, colorMaterial );
+	scene.add(mesh);
+}
 
-                // Configurar el marcador Hiro
-                let markerControls = new THREEx.ArMarkerControls(arToolkitContext, markerRoot, {
-                    type: 'pattern',
-                    patternUrl: AR_CONFIG.hiroPattern,
-                });
+function animate() 
+{
+    requestAnimationFrame( animate );
+	render();		
+	update();
+}
 
-                markerControls.addEventListener('markerFound', () => {
-                    isMarkerVisible = true;
-                    updateInfo('¡Marcador detectado! Objetos 3D visibles.');
-                    console.log('Marcador encontrado');
-                });
+function update()
+{
+	controls.update();
+	stats.update();
+}
 
-                markerControls.addEventListener('markerLost', () => {
-                    isMarkerVisible = false;
-                    updateInfo('Marcador perdido. Vuelve a apuntar hacia él.');
-                    console.log('Marcador perdido');
-                });
+function render() 
+{
+	renderer.render( scene, camera );
+}
 
-                // Ahora que markerRoot está creado, podemos añadir el contenido AR
-                createARContent();
-                
-                // Todo configurado correctamente
-                updateInfo('✅ AR configurado. Busca el marcador Hiro con tu cámara.');
-                console.log('Configuración completa - listo para detectar marcadores');
+</script>
 
-            } catch (error) {
-                console.error('Error al configurar marcador:', error);
-                showError('Error al configurar el marcador Hiro: ' + error.message);
-            }
-        }
-
-        function setupLighting() {
-            // Luz ambiental
-            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-            scene.add(ambientLight);
-
-            // Luz direccional
-            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-            directionalLight.position.set(2, 2, 2);
-            directionalLight.castShadow = true;
-            scene.add(directionalLight);
-        }
-
-        function createARContent() {
-            // Verificar que markerRoot esté definido
-            if (!markerRoot) {
-                console.error('markerRoot no está definido. No se puede crear contenido AR.');
-                return;
-            }
-
-            // Cubo multicolor animado
-            const geometry = new THREE.BoxGeometry(1, 1, 1);
-            const materials = [
-                new THREE.MeshLambertMaterial({ color: 0xff4444 }), // Rojo
-                new THREE.MeshLambertMaterial({ color: 0x44ff44 }), // Verde
-                new THREE.MeshLambertMaterial({ color: 0x4444ff }), // Azul
-                new THREE.MeshLambertMaterial({ color: 0xffff44 }), // Amarillo
-                new THREE.MeshLambertMaterial({ color: 0xff44ff }), // Magenta
-                new THREE.MeshLambertMaterial({ color: 0x44ffff })  // Cian
-            ];
-            
-            cube = new THREE.Mesh(geometry, materials);
-            cube.position.set(0, 0.5, 0);
-            cube.castShadow = true;
-            markerRoot.add(cube);
-
-            // Esfera que orbita
-            const sphereGeometry = new THREE.SphereGeometry(0.3, 16, 16);
-            const sphereMaterial = new THREE.MeshLambertMaterial({ 
-                color: 0xffffff,
-                emissive: 0x222222
-            });
-            sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
-            sphere.position.set(2, 1, 0);
-            sphere.castShadow = true;
-            markerRoot.add(sphere);
-
-            // Plano base con textura
-            const planeGeometry = new THREE.PlaneGeometry(5, 5);
-            const planeMaterial = new THREE.MeshLambertMaterial({ 
-                color: 0x666666,
-                transparent: true,
-                opacity: 0.7
-            });
-            const plane = new THREE.Mesh(planeGeometry, planeMaterial);
-            plane.rotation.x = -Math.PI / 2;
-            plane.receiveShadow = true;
-            markerRoot.add(plane);
-
-            // Pirámide adicional
-            const pyramidGeometry = new THREE.ConeGeometry(0.5, 1, 8);
-            const pyramidMaterial = new THREE.MeshLambertMaterial({ color: 0xff6600 });
-            const pyramid = new THREE.Mesh(pyramidGeometry, pyramidMaterial);
-            pyramid.position.set(-1.5, 0.5, 1);
-            pyramid.castShadow = true;
-            markerRoot.add(pyramid);
-
-            console.log('Contenido AR creado exitosamente');
-        }
-
-        function onResize() {
-            if (arToolkitSource && arToolkitSource.ready) {
-                arToolkitSource.onResize();
-                arToolkitSource.copySizeTo(renderer.domElement);
-                if (arToolkitContext.arController !== null) {
-                    arToolkitSource.copySizeTo(arToolkitContext.arController.canvas);
-                }
-            }
-        }
-
-        function animate() {
-            animationId = requestAnimationFrame(animate);
-
-            try {
-                // Actualizar AR
-                if (arToolkitSource && arToolkitSource.ready) {
-                    arToolkitContext.update(arToolkitSource.domElement);
-                }
-
-                // Animar objetos cuando el marcador esté visible
-                if (isMarkerVisible) {
-                    if (cube) {
-                        cube.rotation.x += 0.02;
-                        cube.rotation.y += 0.03;
-                    }
-                    
-                    if (sphere) {
-                        // Hacer que la esfera orbite
-                        const time = Date.now() * 0.001;
-                        sphere.position.x = Math.cos(time) * 2;
-                        sphere.position.z = Math.sin(time) * 2;
-                        sphere.position.y = 1 + Math.sin(time * 2) * 0.3;
-                    }
-                }
-
-                // Renderizar la escena
-                renderer.render(scene, camera);
-            } catch (error) {
-                console.error('Error en animate:', error);
-            }
-        }
-
-        function updateInfo(message) {
-            document.getElementById('info').innerHTML = `
-                <strong>Estado:</strong> ${message}<br>
-                <small>Asegúrate de tener el marcador Hiro impreso</small>
-            `;
-        }
-
-        function showError(message) {
-            const errorDiv = document.getElementById('error');
-            errorDiv.innerHTML = `
-                <h3>⚠️ Error</h3>
-                <p>${message}</p>
-                <button onclick="location.reload()">Reintentar</button>
-            `;
-            errorDiv.style.display = 'block';
-        }
-
-        // Verificar acceso a la cámara
-        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-            navigator.mediaDevices.getUserMedia({ video: true })
-                .then(stream => {
-                    console.log('Permisos de cámara concedidos');
-                    stream.getTracks().forEach(track => track.stop()); // Detener el stream de prueba
-                })
-                .catch(err => {
-                    console.error('Error al acceder a la cámara:', err);
-                    showError('No se pudo acceder a la cámara. Verifica los permisos del navegador.');
-                });
-        } else {
-            showError('Tu navegador no soporta acceso a la cámara.');
-        }
-
-        // Limpiar recursos al cerrar
-        window.addEventListener('beforeunload', () => {
-            if (animationId) {
-                cancelAnimationFrame(animationId);
-            }
-        });
-    </script>
 </body>
 </html>
