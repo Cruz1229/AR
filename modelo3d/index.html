@@ -81,9 +81,8 @@
             try {
                 setupScene();
                 setupRenderer();
-                setupAR();
                 setupLighting();
-                createARContent();
+                setupAR(); // Esto ahora manejará la creación del contenido AR de forma asíncrona
                 animate();
             } catch (error) {
                 console.error('Error durante la inicialización:', error);
@@ -110,6 +109,8 @@
         }
 
         function setupAR() {
+            updateInfo('Iniciando cámara...');
+
             // Configurar AR Toolkit Source
             arToolkitSource = new THREEx.ArToolkitSource({
                 sourceType: 'webcam',
@@ -118,25 +119,27 @@
             arToolkitSource.init(() => {
                 console.log('AR Source inicializado');
                 onResize();
-                updateInfo('Cámara iniciada. Busca el marcador Hiro.');
+                updateInfo('Cámara iniciada. Cargando parámetros AR...');
+                
+                // Configurar AR Toolkit Context después de que la cámara esté lista
+                arToolkitContext = new THREEx.ArToolkitContext({
+                    cameraParametersUrl: AR_CONFIG.cameraParams,
+                    detectionMode: 'mono',
+                });
+
+                arToolkitContext.init(() => {
+                    console.log('AR Context inicializado');
+                    camera.projectionMatrix.copy(arToolkitContext.getProjectionMatrix());
+                    updateInfo('AR inicializado. Configurando marcador...');
+                    setupMarker();
+                }, (error) => {
+                    console.error('Error al inicializar AR Context:', error);
+                    showError('Error al cargar parámetros de AR. Verifica la conexión.');
+                });
+
             }, (error) => {
                 console.error('Error al inicializar AR Source:', error);
                 showError('Error al acceder a la cámara. Verifica los permisos.');
-            });
-
-            // Configurar AR Toolkit Context con manejo de errores
-            arToolkitContext = new THREEx.ArToolkitContext({
-                cameraParametersUrl: AR_CONFIG.cameraParams,
-                detectionMode: 'mono',
-            });
-
-            arToolkitContext.init(() => {
-                console.log('AR Context inicializado');
-                camera.projectionMatrix.copy(arToolkitContext.getProjectionMatrix());
-                setupMarker();
-            }, (error) => {
-                console.error('Error al inicializar AR Context:', error);
-                showError('Error al cargar parámetros de AR. Verifica la conexión.');
             });
 
             // Manejar redimensionamiento
@@ -144,12 +147,13 @@
         }
 
         function setupMarker() {
-            // Crear el grupo para el marcador
-            markerRoot = new THREE.Group();
-            scene.add(markerRoot);
-
-            // Configurar el marcador Hiro
             try {
+                // Crear el grupo para el marcador
+                markerRoot = new THREE.Group();
+                scene.add(markerRoot);
+                console.log('markerRoot creado exitosamente');
+
+                // Configurar el marcador Hiro
                 let markerControls = new THREEx.ArMarkerControls(arToolkitContext, markerRoot, {
                     type: 'pattern',
                     patternUrl: AR_CONFIG.hiroPattern,
@@ -167,9 +171,16 @@
                     console.log('Marcador perdido');
                 });
 
+                // Ahora que markerRoot está creado, podemos añadir el contenido AR
+                createARContent();
+                
+                // Todo configurado correctamente
+                updateInfo('✅ AR configurado. Busca el marcador Hiro con tu cámara.');
+                console.log('Configuración completa - listo para detectar marcadores');
+
             } catch (error) {
                 console.error('Error al configurar marcador:', error);
-                showError('Error al configurar el marcador Hiro.');
+                showError('Error al configurar el marcador Hiro: ' + error.message);
             }
         }
 
@@ -186,6 +197,12 @@
         }
 
         function createARContent() {
+            // Verificar que markerRoot esté definido
+            if (!markerRoot) {
+                console.error('markerRoot no está definido. No se puede crear contenido AR.');
+                return;
+            }
+
             // Cubo multicolor animado
             const geometry = new THREE.BoxGeometry(1, 1, 1);
             const materials = [
@@ -233,7 +250,7 @@
             pyramid.castShadow = true;
             markerRoot.add(pyramid);
 
-            console.log('Contenido AR creado');
+            console.log('Contenido AR creado exitosamente');
         }
 
         function onResize() {
