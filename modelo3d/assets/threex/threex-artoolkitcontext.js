@@ -71,7 +71,7 @@ ARjs.Context = THREEx.ArToolkitContext = function(parameters){
 	}
 }
 
-Object.assign( ARjs.Context.prototype, THREE.EventDispatcher.prototype );
+Object.assign( ARjs.Context.prototype, THREEx.EventDispatcher.prototype );
 
 // ARjs.Context.baseURL = '../'
 // default to github page
