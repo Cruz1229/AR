@@ -1,202 +1,100 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <title>AR con Marcador Hiro</title>
-    <link rel="stylesheet" href="assets/css/styles.css">
-    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
-    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
-    <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js@3.3.2/aframe/build/aframe-ar.js"></script>
+  <meta charset="utf-8">
+  <title>AR.js con Three.js y marcador Hiro</title>
+  <style>
+    body { margin: 0; overflow: hidden; }
+    canvas { position: absolute; top: 0; left: 0; }
+  </style>
+
+  <!-- Three.js -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js"></script>
+  <!-- GLTFLoader para cargar modelos .glb -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/examples/js/loaders/GLTFLoader.js"></script>
+  <!-- AR.js (versión Three.js pura) -->
+  <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js/three.js/build/ar-threex.js"></script>
 </head>
 <body>
-    <div id="info">
-        <div>Apunta la cámara al marcador Hiro</div>
-        <div>Modelo: Corazón Humano Low-Poly</div>
-    </div>
-    
-    <div id="loading">
-        <div>Cargando modelo 3D...</div>
-    </div>
+  <script>
+    // Escena, cámara y renderizador
+    let scene, camera, renderer;
+    let clock = new THREE.Clock();
+    let model;
 
-    <!-- Three.js -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    
-    <!-- GLTFLoader -->
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
-    
-    <!-- AR.js -->
-    <script src="https://raw.githack.com/AR-js-org/AR.js/master/three.js/build/ar-threejs.js"></script>
+    init();
 
-    <script>
-        let scene, camera, renderer, arToolkitSource, arToolkitContext;
-        let heartModel = null;
-        let markerRoot;
-        let loadingDiv = document.getElementById('loading');
+    function init() {
+      scene = new THREE.Scene();
 
-        function init() {
-            // Crear la escena
-            scene = new THREE.Scene();
+      camera = new THREE.Camera();
+      scene.add(camera);
 
-            // Crear la cámara
-            camera = new THREE.Camera();
-            scene.add(camera);
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setClearColor(0x000000, 0); // fondo transparente
+      document.body.appendChild(renderer.domElement);
 
-            // Crear el renderer
-            renderer = new THREE.WebGLRenderer({
-                antialias: true,
-                alpha: true
-            });
-            renderer.setClearColor(new THREE.Color('lightgrey'), 0);
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.domElement.style.position = 'absolute';
-            renderer.domElement.style.top = '0px';
-            renderer.domElement.style.left = '0px';
-            document.body.appendChild(renderer.domElement);
+      // Configurar AR.js
+      let arSource = new THREEx.ArToolkitSource({ sourceType: 'webcam' });
+      arSource.init(() => onResize());
+      window.addEventListener('resize', () => onResize());
 
-            // Configurar AR
-            setupAR();
-            
-            // Cargar el modelo 3D
-            loadHeartModel();
-            
-            // Añadir luces
-            setupLights();
-            
-            // Iniciar el bucle de renderizado
-            animate();
+      let arContext = new THREEx.ArToolkitContext({
+        cameraParametersUrl: 'https://cdn.jsdelivr.net/gh/AR-js-org/AR.js/three.js/data/camera_para.dat',
+        detectionMode: 'mono'
+      });
+
+      arContext.init(() => {
+        camera.projectionMatrix.copy(arContext.getProjectionMatrix());
+      });
+
+      // Crear el marcador y su grupo asociado
+      let markerRoot = new THREE.Group();
+      scene.add(markerRoot);
+
+      let markerControls = new THREEx.ArMarkerControls(arContext, markerRoot, {
+        type: 'pattern',
+        patternUrl: 'https://cdn.jsdelivr.net/gh/AR-js-org/AR.js/three.js/data/patt.hiro',
+      });
+
+      // Luz básica
+      let light = new THREE.DirectionalLight(0xffffff, 1);
+      light.position.set(1, 1, 1).normalize();
+      scene.add(light);
+
+      // Cargar modelo glTF (.glb)
+      const loader = new THREE.GLTFLoader();
+      loader.load(
+        'https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Models@master/2.0/Duck/glTF-Binary/Duck.glb',
+        gltf => {
+          model = gltf.scene;
+          model.scale.set(0.01, 0.01, 0.01); // Escalar adecuadamente
+          markerRoot.add(model);
+        },
+        undefined,
+        error => {
+          console.error('Error al cargar el modelo:', error);
         }
+      );
 
-        function setupAR() {
-            // Configurar AR Toolkit Source (webcam)
-            arToolkitSource = new THREEx.ArToolkitSource({
-                sourceType: 'webcam',
-            });
+      // Loop de animación
+      function animate() {
+        requestAnimationFrame(animate);
+        if (arSource.ready) arContext.update(arSource.domElement);
+        renderer.render(scene, camera);
+      }
 
-            arToolkitSource.init(function onReady() {
-                onResize();
-            });
+      animate();
+    }
 
-            // Handle resize event
-            window.addEventListener('resize', function() {
-                onResize();
-            });
-
-            // Crear AR Toolkit Context
-            arToolkitContext = new THREEx.ArToolkitContext({
-                cameraParametersUrl: 'https://raw.githack.com/AR-js-org/AR.js/master/data/data/camera_para.dat',
-                detectionMode: 'mono',
-            });
-
-            arToolkitContext.init(function onCompleted() {
-                camera.projectionMatrix.copy(arToolkitContext.getProjectionMatrix());
-            });
-
-            // Crear marcador Hiro
-            markerRoot = new THREE.Group();
-            scene.add(markerRoot);
-            
-            let markerControls = new THREEx.ArMarkerControls(arToolkitContext, markerRoot, {
-                type: 'pattern',
-                patternUrl: 'https://raw.githack.com/AR-js-org/AR.js/master/data/data/patt.hiro'
-            });
-        }
-
-        function setupLights() {
-            // Luz ambiental
-            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-            scene.add(ambientLight);
-
-            // Luz direccional
-            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-            directionalLight.position.set(1, 1, 1);
-            scene.add(directionalLight);
-
-            // Luz puntual para destacar el modelo
-            const pointLight = new THREE.PointLight(0xff4444, 0.5);
-            pointLight.position.set(0, 2, 0);
-            markerRoot.add(pointLight);
-        }
-
-        function loadHeartModel() {
-            const loader = new THREE.GLTFLoader();
-            
-            loader.load('scene.gltf', 
-                function(gltf) {
-                    heartModel = gltf.scene;
-                    
-                    // Ajustar escala y posición
-                    heartModel.scale.set(0.5, 0.5, 0.5);
-                    heartModel.position.set(0, 0, 0);
-                    heartModel.rotation.x = -Math.PI / 2; // Rotar -90 grados en X
-                    
-                    // Añadir al marcador
-                    markerRoot.add(heartModel);
-                    
-                    // Ocultar loading
-                    loadingDiv.style.display = 'none';
-                    
-                    // Iniciar animación si existe
-                    if (gltf.animations && gltf.animations.length > 0) {
-                        const mixer = new THREE.AnimationMixer(heartModel);
-                        const action = mixer.clipAction(gltf.animations[0]);
-                        action.play();
-                        
-                        // Actualizar animación en el bucle
-                        function updateAnimation() {
-                            mixer.update(0.016); // ~60fps
-                            requestAnimationFrame(updateAnimation);
-                        }
-                        updateAnimation();
-                    }
-                    
-                    console.log('Modelo del corazón cargado exitosamente');
-                },
-                function(progress) {
-                    console.log('Progreso de carga:', (progress.loaded / progress.total * 100) + '%');
-                },
-                function(error) {
-                    console.error('Error al cargar el modelo:', error);
-                    loadingDiv.innerHTML = '<div style="color: red;">Error al cargar el modelo 3D</div>';
-                }
-            );
-        }
-
-        function onResize() {
-            arToolkitSource.onResizeElement();
-            arToolkitSource.copyElementSizeTo(renderer.domElement);
-            if (arToolkitContext.arController !== null) {
-                arToolkitSource.copyElementSizeTo(arToolkitContext.arController.canvas);
-            }
-        }
-
-        function animate() {
-            requestAnimationFrame(animate);
-            
-            if (arToolkitSource.ready !== false) {
-                arToolkitContext.update(arToolkitSource.domElement);
-            }
-            
-            // Rotar el corazón suavemente si está cargado
-            if (heartModel) {
-                heartModel.rotation.y += 0.01;
-            }
-            
-            renderer.render(scene, camera);
-        }
-
-        // Verificar compatibilidad y inicializar
-        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-            init();
-        } else {
-            document.body.innerHTML = '<div style="text-align: center; margin-top: 50px; color: red;">Tu navegador no soporta acceso a la cámara</div>';
-        }
-
-        // Manejar errores de cámara
-        window.addEventListener('error', function(e) {
-            if (e.message.includes('camera') || e.message.includes('webcam')) {
-                loadingDiv.innerHTML = '<div style="color: red;">Error: No se pudo acceder a la cámara<br>Asegúrate de permitir el acceso a la cámara</div>';
-            }
-        });
-    </script>
+    function onResize() {
+      arSource.onResize();
+      arSource.copySizeTo(renderer.domElement);
+      if (arContext.arController) {
+        arSource.copySizeTo(arContext.arController.canvas);
+      }
+    }
+  </script>
 </body>
 </html>
