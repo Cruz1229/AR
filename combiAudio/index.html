@@ -4,14 +4,8 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
     <title>AR con Modelo GLTF, Marcador Hiro y Audio</title>
-    
-    <!-- Three.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/101/three.min.js"></script>
-    
-    <!-- THREE.AR -->
     <script src="dist/THREEAR.js"></script>
-    
-    <!-- GLTFLoader para Three.js r101 -->
     <script src="https://cdn.jsdelivr.net/gh/mrdoob/three.js@r101/examples/js/loaders/GLTFLoader.js"></script>
     
     <style>
@@ -59,9 +53,7 @@
     </style>
 </head>
 <body>
-    <!-- Elemento de audio -->
     <audio loop id="modelAudio" preload="auto" style="display: none">
-        <!-- Añade aquí tus archivos de audio -->
         <source src="sounds/model_sound.ogg" type="audio/ogg">
         <source src="sounds/model_sound.mp3" type="audio/mpeg">
     </audio>
@@ -79,19 +71,16 @@
     </div>
 
     <script>
-        // Variables globales
         var renderer, scene, camera, markerGroup;
         var gltfModel = null;
         var statusElement = document.getElementById('status');
         var errorElement = document.getElementById('error');
         var audioInfoElement = document.getElementById('audioInfo');
         
-        // Variables de audio
         var listener, positionalAudio;
         var audioElement = document.getElementById('modelAudio');
         var audioInitialized = false;
         
-        // Configuración del renderer
         renderer = new THREE.WebGLRenderer({
             antialias: true,
             alpha: true
@@ -103,20 +92,16 @@
         renderer.domElement.style.left = '0px';
         document.body.appendChild(renderer.domElement);
         
-        // Inicializar escena y cámara
         scene = new THREE.Scene();
         camera = new THREE.Camera();
         scene.add(camera);
         
-        // Configurar audio listener
         listener = new THREE.AudioListener();
         camera.add(listener);
         
-        // Grupo para el marcador
         markerGroup = new THREE.Group();
         scene.add(markerGroup);
         
-        // Agregar luces
         var ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
         scene.add(ambientLight);
         
@@ -124,13 +109,10 @@
         directionalLight.position.set(1, 1, 0.5).normalize();
         scene.add(directionalLight);
         
-        // Función para inicializar el audio
         function initializeAudio() {
             if (!audioInitialized) {
-                // Crear audio posicional
                 positionalAudio = new THREE.PositionalAudio(listener);
                 
-                // Verificar si el elemento de audio existe
                 if (audioElement) {
                     try {
                         positionalAudio.setMediaElementSource(audioElement);
@@ -140,14 +122,12 @@
                         positionalAudio.setMaxDistance(10);
                         positionalAudio.setVolume(0.5);
                         
-                        // Añadir el audio al grupo del marcador
                         markerGroup.add(positionalAudio);
                         
                         audioInitialized = true;
                         console.log('Audio inicializado correctamente');
                     } catch (error) {
                         console.warn('Error al inicializar audio:', error);
-                        // Continuar sin audio si hay error
                     }
                 } else {
                     console.warn('Elemento de audio no encontrado');
@@ -155,7 +135,6 @@
             }
         }
         
-        // Función para cargar el modelo GLTF
         function loadGLTFModel(modelPath) {
             var loader = new THREE.GLTFLoader();
             
@@ -164,14 +143,12 @@
                 function(gltf) {
                     gltfModel = gltf.scene;
                     
-                    // Ajustar escala y posición del modelo
-                    gltfModel.scale.set(0.5, 0.5, 0.5); // Ajusta según tu modelo
-                    gltfModel.position.y = 0; // Ajusta la altura según necesites
+                    gltfModel.scale.set(0.5, 0.5, 0.5);
+                    gltfModel.position.set(0, 0, 0);
+                    gltfModel.rotation.x = Math.PI / -2;
                     
-                    // Agregar el modelo al grupo del marcador
                     markerGroup.add(gltfModel);
                     
-                    // Inicializar audio después de cargar el modelo
                     initializeAudio();
                     
                     statusElement.textContent = 'Modelo cargado. Busca el marcador Hiro...';
@@ -186,13 +163,11 @@
                     errorElement.textContent = 'Error al cargar el modelo GLTF: ' + error.message;
                     errorElement.style.display = 'block';
                     
-                    // Cargar geometría de respaldo si falla el modelo
                     cargarGeometriaRespaldo();
                 }
             );
         }
         
-        // Geometría de respaldo en caso de error
         function cargarGeometriaRespaldo() {
             var geometry = new THREE.TorusKnotGeometry(0.3, 0.1, 64, 16);
             var material = new THREE.MeshNormalMaterial();
@@ -200,17 +175,14 @@
             torus.position.y = 0.5;
             markerGroup.add(torus);
             
-            // Inicializar audio incluso con geometría de respaldo
             initializeAudio();
             
             statusElement.textContent = 'Usando geometría de respaldo. Busca el marcador Hiro...';
         }
         
-        // Función para reproducir audio
         function playAudio() {
             if (audioElement && audioInitialized) {
                 try {
-                    // Primero intentamos con play() del elemento de audio
                     var playPromise = audioElement.play();
                     
                     if (playPromise !== undefined) {
@@ -219,7 +191,6 @@
                             audioInfoElement.style.display = 'block';
                         }).catch(function(error) {
                             console.warn('Error al reproducir audio:', error);
-                            // Intentar reproducir después de interacción del usuario
                         });
                     }
                 } catch (error) {
@@ -228,7 +199,6 @@
             }
         }
         
-        // Función para pausar audio
         function pauseAudio() {
             if (audioElement && !audioElement.paused) {
                 try {
@@ -241,30 +211,20 @@
             }
         }
         
-        // Manejar clic para habilitar audio (políticas del navegador)
         document.addEventListener('click', function() {
             if (audioElement && audioElement.paused && markerDetected) {
                 playAudio();
             }
         }, { once: true });
         
-        // Variable para rastrear si el marcador está detectado
         var markerDetected = false;
         
-        // Inicializar AR
         var source = new THREEAR.Source({ renderer: renderer, camera: camera });
         
         THREEAR.initialize({ source: source, lostTimeout: 1000 }).then((controller) => {
             
-            // Cargar el modelo GLTF
-            // IMPORTANTE: Cambia esta ruta por la de tu modelo GLTF
-            loadGLTFModel('models/gltf/lowpoly_human_heart.glb'); // <-- CAMBIA ESTA RUTA
+            loadGLTFModel('models/gltf/lowpoly_human_heart.glb'); 
             
-            // Si no tienes un modelo, puedes usar una geometría de ejemplo
-            // Descomenta la siguiente línea y comenta la anterior
-            // cargarGeometriaRespaldo();
-            
-            // Configurar el marcador de patrón
             var patternMarker = new THREEAR.PatternMarker({
                 patternUrl: 'data/patt.hiro',
                 markerObject: markerGroup,
@@ -273,14 +233,12 @@
             
             controller.trackMarker(patternMarker);
             
-            // Eventos del marcador
             controller.addEventListener('markerFound', function(event) {
                 console.log('Marcador encontrado', event);
                 markerDetected = true;
                 statusElement.textContent = 'Marcador detectado - Mostrando modelo';
                 statusElement.style.backgroundColor = 'rgba(0, 255, 0, 0.5)';
                 
-                // Reproducir audio cuando se detecta el marcador
                 playAudio();
             });
             
@@ -290,11 +248,9 @@
                 statusElement.textContent = 'Buscando marcador...';
                 statusElement.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
                 
-                // Pausar audio cuando se pierde el marcador
                 pauseAudio();
             });
             
-            // Loop de renderizado
             var lastTimeMsec = 0;
             requestAnimationFrame(function animate(nowMsec) {
                 requestAnimationFrame(animate);
@@ -303,15 +259,12 @@
                 var deltaMsec = Math.min(200, nowMsec - lastTimeMsec);
                 lastTimeMsec = nowMsec;
                 
-                // Actualizar el controlador AR
                 controller.update(source.domElement);
                 
-                // Rotar el modelo si existe
                 if (gltfModel) {
                     gltfModel.rotation.y += deltaMsec/2000 * Math.PI;
                 }
                 
-                // Renderizar la escena
                 renderer.render(scene, camera);
             });
             
@@ -321,12 +274,10 @@
             errorElement.style.display = 'block';
         });
         
-        // Manejar cambios de tamaño de ventana
         window.addEventListener('resize', function() {
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
         
-        // Manejo de errores global
         window.addEventListener('error', function(event) {
             console.error('Error global:', event);
             errorElement.textContent = 'Error: ' + event.message;
