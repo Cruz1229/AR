@@ -4,8 +4,9 @@
 	<head>
 		<meta name='viewport' content='width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0'>
 		<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/101/three.min.js"></script>	
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/101/loaders/GLTFLoader.js"></script>
 		<script src="dist/THREEAR.js"></script>
-		<title>THREE AR Basic Pattern Marker Demo</title>
+		<title>AR Demo con Modelo GLTF - Corazón 3D</title>
 		<script>
 			// window.addEventListener('error', function(event) {
 			// 	alert("ERROR: " + event.message + " at " + event.filename + " : " + event.lineno + " : " + event.colno);
@@ -14,49 +15,90 @@
 	</head>
 
 	<body style='margin : 0px; overflow: hidden; font-family: Monospace;'>
+		
+		<!-- Indicador de carga -->
+		<div id="loading" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: white; font-size: 18px; z-index: 100;">
+			Cargando modelo 3D...
+		</div>
+
 		<script>
-						
+			// Configuración del renderer
 			var renderer = new THREE.WebGLRenderer({
-				// antialias	: true,
 				alpha: true
 			});
 			renderer.setClearColor(new THREE.Color('lightgrey'), 0)
-			// renderer.setPixelRatio( 2 );
 			renderer.setSize( window.innerWidth, window.innerHeight );
 			renderer.domElement.style.position = 'absolute'
 			renderer.domElement.style.top = '0px'
 			renderer.domElement.style.left = '0px'
 			document.body.appendChild( renderer.domElement );
 		
-			// init scene and camera
+			// Inicializar escena y cámara
 			var scene = new THREE.Scene();
 			var camera = new THREE.Camera();
 			scene.add(camera);
 
+			// Grupo para el marcador
 			var markerGroup = new THREE.Group();
 			scene.add(markerGroup);
-		
+
+			// Variables para el modelo y animaciones
+			var heartModel = null;
+			var mixer = null;
+			var clock = new THREE.Clock();
+
+			// Añadir luces para mejor visualización del modelo
+			var ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+			markerGroup.add(ambientLight);
+
+			var directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+			directionalLight.position.set(1, 1, 1);
+			markerGroup.add(directionalLight);
+
+			// Cargar el modelo GLTF
+			var loader = new THREE.GLTFLoader();
+			loader.load('scene.gltf', function(gltf) {
+				console.log('Modelo GLTF cargado exitosamente');
+				
+				// Obtener el modelo
+				heartModel = gltf.scene;
+				
+				// Ajustar escala y posición del modelo
+				heartModel.scale.set(0.5, 0.5, 0.5); // Ajusta según necesites
+				heartModel.position.set(0, 0, 0);
+				
+				// Añadir el modelo al grupo del marcador
+				markerGroup.add(heartModel);
+				
+				// Configurar animaciones si existen
+				if (gltf.animations && gltf.animations.length > 0) {
+					mixer = new THREE.AnimationMixer(heartModel);
+					
+					// Reproducir todas las animaciones
+					gltf.animations.forEach(function(clip) {
+						var action = mixer.clipAction(clip);
+						action.play();
+					});
+				}
+				
+				// Ocultar indicador de carga
+				document.getElementById('loading').style.display = 'none';
+				
+			}, function(progress) {
+				// Progreso de carga
+				console.log('Progreso de carga: ', (progress.loaded / progress.total * 100) + '%');
+				
+			}, function(error) {
+				console.error('Error al cargar el modelo GLTF:', error);
+				document.getElementById('loading').innerHTML = 'Error al cargar el modelo. Verifica que scene.gltf esté disponible.';
+			});
+
+			// Configurar AR
 			var source = new THREEAR.Source({ renderer, camera });
 
 			THREEAR.initialize({ source: source, lostTimeout: 500 }).then((controller) => {
 
-				// add a torus knot		
-				var geometry = new THREE.TorusKnotGeometry(0.3,0.1,64,16);
-				var material = new THREE.MeshNormalMaterial(); 
-				var torus = new THREE.Mesh( geometry, material );
-				torus.position.y = 0.5
-				markerGroup.add(torus);
-
-				var geometry = new THREE.CubeGeometry(1,1,1);
-				var material = new THREE.MeshNormalMaterial({
-					transparent : true,
-					opacity: 0.5,
-					side: THREE.DoubleSide
-				}); 
-				var cube = new THREE.Mesh( geometry, material );
-				cube.position.y	= geometry.parameters.height / 2;
-				markerGroup.add(cube)
-
+				// Configurar el marcador de patrón
 				var patternMarker = new THREEAR.PatternMarker({
 					patternUrl: 'data/patt.hiro',
 					markerObject: markerGroup,
@@ -65,31 +107,47 @@
 
 				controller.trackMarker(patternMarker);
 
+				// Eventos del marcador
 				controller.addEventListener('markerFound', function(event) {
-					console.log('markerFound', event);
+					console.log('Marcador encontrado', event);
 				});
 
 				controller.addEventListener('markerLost', function(event) {
-					console.log('markerLost', event);
+					console.log('Marcador perdido', event);
 				});
 
-				// run the rendering loop
+				// Bucle de renderizado
 				var lastTimeMsec = 0;
 				requestAnimationFrame(function animate(nowMsec){
-					// keep looping
+					// Continuar el bucle
 					requestAnimationFrame( animate );
-					// measure time
+					
+					// Medir tiempo
 					lastTimeMsec = lastTimeMsec || nowMsec-1000/60;
 					var deltaMsec = Math.min(200, nowMsec - lastTimeMsec);
 					lastTimeMsec = nowMsec;
-					// call each update function
+					
+					// Actualizar controlador AR
 					controller.update( source.domElement );
-					// cube.rotation.x += deltaMsec/10000 * Math.PI
-					torus.rotation.y += deltaMsec/1000 * Math.PI
-					torus.rotation.z += deltaMsec/1000 * Math.PI
+					
+					// Actualizar animaciones del modelo si existen
+					if (mixer) {
+						var delta = clock.getDelta();
+						mixer.update(delta);
+					}
+					
+					// Rotación adicional opcional del modelo (puedes comentar estas líneas si no las necesitas)
+					if (heartModel) {
+						heartModel.rotation.y += deltaMsec/3000 * Math.PI; // Rotación lenta en Y
+					}
+					
+					// Renderizar la escena
 					renderer.render( scene, camera );
 				});
 
+			}).catch(function(error) {
+				console.error('Error al inicializar AR:', error);
+				document.getElementById('loading').innerHTML = 'Error al inicializar AR. Verifica que tengas acceso a la cámara.';
 			});
 
 		</script>
