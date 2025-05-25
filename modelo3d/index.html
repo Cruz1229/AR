@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="utf-8">
-  <title>AR.js con Three.js y marcador Hiro</title>
+  <title>AR.js con Three.js</title>
   <style>
     body { margin: 0; overflow: hidden; }
     canvas { position: absolute; top: 0; left: 0; }
@@ -10,19 +10,19 @@
 
   <!-- Three.js -->
   <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js"></script>
-  <!-- GLTFLoader para cargar modelos .glb -->
+  <!-- GLTFLoader -->
   <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/examples/js/loaders/GLTFLoader.js"></script>
-  <!-- AR.js (versión Three.js pura) -->
+  <!-- AR.js para Three.js -->
   <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js/three.js/build/ar-threex.js"></script>
 </head>
 <body>
   <script>
-    // Escena, cámara y renderizador
     let scene, camera, renderer;
-    let clock = new THREE.Clock();
-    let model;
+    let arToolkitSource, arToolkitContext;
+    let markerRoot;
 
     init();
+    animate();
 
     function init() {
       scene = new THREE.Scene();
@@ -32,68 +32,77 @@
 
       renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
       renderer.setSize(window.innerWidth, window.innerHeight);
-      renderer.setClearColor(0x000000, 0); // fondo transparente
+      renderer.setClearColor(0x000000, 0);
       document.body.appendChild(renderer.domElement);
 
-      // Configurar AR.js
-      let arSource = new THREEx.ArToolkitSource({ sourceType: 'webcam' });
-      arSource.init(() => onResize());
-      window.addEventListener('resize', () => onResize());
+      // AR Toolkit Source (webcam)
+      arToolkitSource = new THREEx.ArToolkitSource({
+        sourceType: 'webcam',
+      });
 
-      let arContext = new THREEx.ArToolkitContext({
+      arToolkitSource.init(() => {
+        onResize();
+      });
+
+      window.addEventListener('resize', () => {
+        onResize();
+      });
+
+      // AR Toolkit Context
+      arToolkitContext = new THREEx.ArToolkitContext({
         cameraParametersUrl: 'https://cdn.jsdelivr.net/gh/AR-js-org/AR.js/three.js/data/camera_para.dat',
-        detectionMode: 'mono'
+        detectionMode: 'mono',
       });
 
-      arContext.init(() => {
-        camera.projectionMatrix.copy(arContext.getProjectionMatrix());
+      arToolkitContext.init(() => {
+        camera.projectionMatrix.copy(arToolkitContext.getProjectionMatrix());
       });
 
-      // Crear el marcador y su grupo asociado
-      let markerRoot = new THREE.Group();
+      // Crear el marcador
+      markerRoot = new THREE.Group();
       scene.add(markerRoot);
 
-      let markerControls = new THREEx.ArMarkerControls(arContext, markerRoot, {
+      let markerControls = new THREEx.ArMarkerControls(arToolkitContext, markerRoot, {
         type: 'pattern',
         patternUrl: 'https://cdn.jsdelivr.net/gh/AR-js-org/AR.js/three.js/data/patt.hiro',
       });
 
       // Luz básica
-      let light = new THREE.DirectionalLight(0xffffff, 1);
-      light.position.set(1, 1, 1).normalize();
+      let light = new THREE.AmbientLight(0xffffff, 1);
       scene.add(light);
 
-      // Cargar modelo glTF (.glb)
+      // Cargar modelo glTF
       const loader = new THREE.GLTFLoader();
       loader.load(
         'https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Models@master/2.0/Duck/glTF-Binary/Duck.glb',
-        gltf => {
-          model = gltf.scene;
-          model.scale.set(0.01, 0.01, 0.01); // Escalar adecuadamente
+        function (gltf) {
+          let model = gltf.scene;
+          model.scale.set(0.01, 0.01, 0.01);
           markerRoot.add(model);
         },
         undefined,
-        error => {
-          console.error('Error al cargar el modelo:', error);
+        function (error) {
+          console.error('Error al cargar el modelo GLTF:', error);
         }
       );
-
-      // Loop de animación
-      function animate() {
-        requestAnimationFrame(animate);
-        if (arSource.ready) arContext.update(arSource.domElement);
-        renderer.render(scene, camera);
-      }
-
-      animate();
     }
 
     function onResize() {
-      arSource.onResize();
-      arSource.copySizeTo(renderer.domElement);
-      if (arContext.arController) {
-        arSource.copySizeTo(arContext.arController.canvas);
+      arToolkitSource.onResize();
+      arToolkitSource.copySizeTo(renderer.domElement);
+      if (arToolkitContext.arController !== null) {
+        arToolkitSource.copySizeTo(arToolkitContext.arController.canvas);
       }
+    }
+
+    function animate() {
+      requestAnimationFrame(animate);
+
+      if (arToolkitSource && arToolkitSource.ready) {
+        arToolkitContext.update(arToolkitSource.domElement);
+      }
+
+      renderer.render(scene, camera);
     }
   </script>
 </body>
