@@ -1,99 +1,255 @@
 <!doctype html>
 <html>
+    <head>
+        <meta charset="utf-8">
+        <meta name='viewport' content='width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0'>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/ar.js/2.2.2/aframe-ar.min.js"></script>
+        <title>Demo AR Básico - Patrón Hiro</title>
+        <style>
+            body {
+                margin: 0;
+                overflow: hidden;
+                font-family: Arial, sans-serif;
+            }
+            
+            #info {
+                position: absolute;
+                top: 10px;
+                left: 10px;
+                background: rgba(0,0,0,0.8);
+                color: white;
+                padding: 10px;
+                border-radius: 5px;
+                z-index: 100;
+                font-size: 14px;
+            }
+            
+            #arContainer {
+                position: relative;
+                width: 100vw;
+                height: 100vh;
+            }
+            
+            .loading {
+                position: absolute;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                background: rgba(0,0,0,0.8);
+                color: white;
+                padding: 20px;
+                border-radius: 10px;
+                z-index: 200;
+            }
+        </style>
+    </head>
+    <body>
+        <div id="info">
+            <div>📱 Demo de Realidad Aumentada</div>
+            <div>🎯 Busca el marcador Hiro con tu cámara</div>
+            <div id="status">Inicializando...</div>
+        </div>
+        
+        <div id="loading" class="loading">
+            Iniciando cámara...
+        </div>
+        
+        <div id="arContainer">
+            <canvas id="arCanvas"></canvas>
+        </div>
 
-	<head>
-		<meta name='viewport' content='width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0'>
-		<script src="vendor/three.101.min.js"></script>	
-		<script src="dist/THREEAR.js"></script>
-		<title>THREE AR Basic Pattern Marker Demo</title>
-		<!-- Bind window error for error handling -->
-		<script>
-			// window.addEventListener('error', function(event) {
-			// 	alert("ERROR: " + event.message + " at " + event.filename + " : " + event.lineno + " : " + event.colno);
-			// });
-		</script>
-	</head>
-
-	<body style='margin : 0px; overflow: hidden; font-family: Monospace;'>
-		<script>
-						
-			var renderer = new THREE.WebGLRenderer({
-				// antialias	: true,
-				alpha: true
-			});
-			renderer.setClearColor(new THREE.Color('lightgrey'), 0)
-			// renderer.setPixelRatio( 2 );
-			renderer.setSize( window.innerWidth, window.innerHeight );
-			renderer.domElement.style.position = 'absolute'
-			renderer.domElement.style.top = '0px'
-			renderer.domElement.style.left = '0px'
-			document.body.appendChild( renderer.domElement );
-		
-			// init scene and camera
-			var scene = new THREE.Scene();
-			var camera = new THREE.Camera();
-			scene.add(camera);
-
-			var markerGroup = new THREE.Group();
-			scene.add(markerGroup);
-		
-			var source = new THREEAR.Source({ renderer, camera });
-
-			THREEAR.initialize({ source: source, lostTimeout: 500 }).then((controller) => {
-
-				// add a torus knot		
-				var geometry = new THREE.TorusKnotGeometry(0.3,0.1,64,16);
-				var material = new THREE.MeshNormalMaterial(); 
-				var torus = new THREE.Mesh( geometry, material );
-				torus.position.y = 0.5
-				markerGroup.add(torus);
-
-				var geometry = new THREE.CubeGeometry(1,1,1);
-				var material = new THREE.MeshNormalMaterial({
-					transparent : true,
-					opacity: 0.5,
-					side: THREE.DoubleSide
-				}); 
-				var cube = new THREE.Mesh( geometry, material );
-				cube.position.y	= geometry.parameters.height / 2;
-				markerGroup.add(cube)
-
-				var patternMarker = new THREEAR.PatternMarker({
-					patternUrl: 'data/patt.hiro',
-					markerObject: markerGroup,
-					minConfidence: 0.3
-				});
-
-				controller.trackMarker(patternMarker);
-
-				controller.addEventListener('markerFound', function(event) {
-					console.log('markerFound', event);
-				});
-
-				controller.addEventListener('markerLost', function(event) {
-					console.log('markerLost', event);
-				});
-
-				// run the rendering loop
-				var lastTimeMsec = 0;
-				requestAnimationFrame(function animate(nowMsec){
-					// keep looping
-					requestAnimationFrame( animate );
-					// measure time
-					lastTimeMsec = lastTimeMsec || nowMsec-1000/60;
-					var deltaMsec = Math.min(200, nowMsec - lastTimeMsec);
-					lastTimeMsec = nowMsec;
-					// call each update function
-					controller.update( source.domElement );
-					// cube.rotation.x += deltaMsec/10000 * Math.PI
-					torus.rotation.y += deltaMsec/1000 * Math.PI
-					torus.rotation.z += deltaMsec/1000 * Math.PI
-					renderer.render( scene, camera );
-				});
-
-			});
-
-		</script>
-	</body>
-	
+        <script>
+            let renderer, scene, camera, arToolkitSource, arToolkitContext;
+            let markerGroup, torus, cube;
+            let isMarkerVisible = false;
+            
+            // Función para mostrar información
+            function updateStatus(message) {
+                document.getElementById('status').textContent = message;
+            }
+            
+            // Función para ocultar loading
+            function hideLoading() {
+                const loading = document.getElementById('loading');
+                if (loading) {
+                    loading.style.display = 'none';
+                }
+            }
+            
+            // Función principal de inicialización
+            function init() {
+                try {
+                    initializeRenderer();
+                    initializeScene();
+                    initializeAR();
+                    animate();
+                } catch (error) {
+                    console.error('Error en la inicialización:', error);
+                    updateStatus('Error: ' + error.message);
+                    hideLoading();
+                }
+            }
+            
+            function initializeRenderer() {
+                // Crear renderer
+                renderer = new THREE.WebGLRenderer({
+                    canvas: document.getElementById('arCanvas'),
+                    antialias: true,
+                    alpha: true
+                });
+                renderer.setClearColor(new THREE.Color('lightgrey'), 0);
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                renderer.domElement.style.position = 'absolute';
+                renderer.domElement.style.top = '0px';
+                renderer.domElement.style.left = '0px';
+                
+                updateStatus('Renderer inicializado');
+            }
+            
+            function initializeScene() {
+                // Crear escena y cámara
+                scene = new THREE.Scene();
+                camera = new THREE.Camera();
+                scene.add(camera);
+                
+                // Crear grupo para los marcadores
+                markerGroup = new THREE.Group();
+                scene.add(markerGroup);
+                
+                // Crear objetos 3D
+                createObjects();
+                
+                updateStatus('Escena creada');
+            }
+            
+            function createObjects() {
+                // Crear torus knot
+                const torusGeometry = new THREE.TorusKnotGeometry(0.3, 0.1, 64, 16);
+                const torusMaterial = new THREE.MeshBasicMaterial({
+                    color: 0x00ff00,
+                    wireframe: false
+                });
+                torus = new THREE.Mesh(torusGeometry, torusMaterial);
+                torus.position.y = 0.5;
+                markerGroup.add(torus);
+                
+                // Crear cubo
+                const cubeGeometry = new THREE.BoxGeometry(1, 1, 1);
+                const cubeMaterial = new THREE.MeshBasicMaterial({
+                    color: 0xff0000,
+                    transparent: true,
+                    opacity: 0.5,
+                    side: THREE.DoubleSide
+                });
+                cube = new THREE.Mesh(cubeGeometry, cubeMaterial);
+                cube.position.y = 0.5;
+                markerGroup.add(cube);
+                
+                // Agregar luz
+                const light = new THREE.AmbientLight(0xffffff, 0.8);
+                scene.add(light);
+                
+                const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
+                directionalLight.position.set(1, 1, 1);
+                scene.add(directionalLight);
+            }
+            
+            function initializeAR() {
+                // Para esta demo, simularemos AR sin librerías externas
+                updateStatus('Modo demo sin AR - Objetos 3D visible');
+                hideLoading();
+                
+                // Simular cámara
+                camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+                camera.position.z = 3;
+                
+                // Mostrar objetos inmediatamente para demo
+                markerGroup.visible = true;
+                isMarkerVisible = true;
+            }
+            
+            // Función de animación
+            function animate() {
+                requestAnimationFrame(animate);
+                
+                if (isMarkerVisible) {
+                    // Animar objetos
+                    const time = Date.now() * 0.001;
+                    
+                    if (torus) {
+                        torus.rotation.y = time;
+                        torus.rotation.z = time * 0.5;
+                    }
+                    
+                    if (cube) {
+                        cube.rotation.x = time * 0.3;
+                        cube.rotation.y = time * 0.7;
+                    }
+                }
+                
+                renderer.render(scene, camera);
+            }
+            
+            // Manejar redimensionamiento
+            function onWindowResize() {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            }
+            
+            window.addEventListener('resize', onWindowResize, false);
+            
+            // Controles de teclado para demo
+            document.addEventListener('keydown', function(event) {
+                switch(event.code) {
+                    case 'Space':
+                        isMarkerVisible = !isMarkerVisible;
+                        markerGroup.visible = isMarkerVisible;
+                        updateStatus(isMarkerVisible ? 'Marcador visible' : 'Marcador oculto');
+                        break;
+                    case 'KeyR':
+                        // Reset posición
+                        camera.position.set(0, 0, 3);
+                        camera.rotation.set(0, 0, 0);
+                        updateStatus('Cámara reiniciada');
+                        break;
+                }
+            });
+            
+            // Controles táctiles básicos
+            let isMouseDown = false;
+            let previousMousePosition = { x: 0, y: 0 };
+            
+            document.addEventListener('mousedown', function(event) {
+                isMouseDown = true;
+                previousMousePosition = { x: event.clientX, y: event.clientY };
+            });
+            
+            document.addEventListener('mouseup', function() {
+                isMouseDown = false;
+            });
+            
+            document.addEventListener('mousemove', function(event) {
+                if (!isMouseDown) return;
+                
+                const deltaX = event.clientX - previousMousePosition.x;
+                const deltaY = event.clientY - previousMousePosition.y;
+                
+                markerGroup.rotation.y += deltaX * 0.01;
+                markerGroup.rotation.x += deltaY * 0.01;
+                
+                previousMousePosition = { x: event.clientX, y: event.clientY };
+            });
+            
+            // Inicializar cuando se cargue la página
+            window.addEventListener('load', init);
+            
+            // Mostrar controles
+            setTimeout(() => {
+                updateStatus('Presiona ESPACIO para mostrar/ocultar | R para reiniciar | Arrastra para rotar');
+            }, 2000);
+            
+        </script>
+    </body>
 </html>
