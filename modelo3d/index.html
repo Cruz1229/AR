@@ -74,7 +74,7 @@
       // Cargar modelo glTF
       const loader = new THREE.GLTFLoader();
       loader.load(
-        'https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Models@master/2.0/Duck/glTF-Binary/Duck.glb',
+        scene.gltf,
         function (gltf) {
           let model = gltf.scene;
           model.scale.set(0.01, 0.01, 0.01);
