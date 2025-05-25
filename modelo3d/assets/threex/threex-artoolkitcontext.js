@@ -83,17 +83,17 @@ ARjs.Context.REVISION = '1.6.0'
 /**
  * Create a default camera for this trackingBackend
  * @param {string} trackingBackend - the tracking to user
- * @return {THREE.Camera} the created camera
+ * @return {THREEx.Camera} the created camera
  */
 ARjs.Context.createDefaultCamera = function( trackingBackend ){
 	console.assert(false, 'use ARjs.Utils.createDefaultCamera instead')
 	// Create a camera
 	if( trackingBackend === 'artoolkit' ){
-		var camera = new THREE.Camera();
+		var camera = new THREEx.Camera();
 	}else if( trackingBackend === 'aruco' ){
-		var camera = new THREE.PerspectiveCamera(42, renderer.domElement.width / renderer.domElement.height, 0.01, 100);
+		var camera = new THREEx.PerspectiveCamera(42, renderer.domElement.width / renderer.domElement.height, 0.01, 100);
 	}else if( trackingBackend === 'tango' ){
-		var camera = new THREE.PerspectiveCamera(42, renderer.domElement.width / renderer.domElement.height, 0.01, 100);
+		var camera = new THREEx.PerspectiveCamera(42, renderer.domElement.width / renderer.domElement.height, 0.01, 100);
 	}else console.assert(false)
 	return camera
 }
@@ -189,9 +189,9 @@ ARjs.Context.prototype._initArtoolkit = function(onCompleted){
         var _this = this
 
 	// set this._artoolkitProjectionAxisTransformMatrix to change artoolkit projection matrix axis to match usual webgl one
-	this._artoolkitProjectionAxisTransformMatrix = new THREE.Matrix4()
-	this._artoolkitProjectionAxisTransformMatrix.multiply(new THREE.Matrix4().makeRotationY(Math.PI))
-	this._artoolkitProjectionAxisTransformMatrix.multiply(new THREE.Matrix4().makeRotationZ(Math.PI))
+	this._artoolkitProjectionAxisTransformMatrix = new THREEx.Matrix4()
+	this._artoolkitProjectionAxisTransformMatrix.multiply(new THREEx.Matrix4().makeRotationY(Math.PI))
+	this._artoolkitProjectionAxisTransformMatrix.multiply(new THREEx.Matrix4().makeRotationZ(Math.PI))
 
 	// get cameraParameters
         var cameraParameters = new ARCameraParam(_this.parameters.cameraParametersUrl, function(){
